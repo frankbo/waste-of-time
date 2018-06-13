@@ -1,8 +1,8 @@
 module Main exposing (..)
 
-import Html exposing (Html, text, div, h1, input, ul, li)
-import Html.Attributes exposing (src, placeholder   )
-import Html.Events exposing (onInput)
+import Html exposing (Html, text, div, h1, input, ul, li, span, button)
+import Html.Attributes exposing (src, placeholder)
+import Html.Events exposing (onInput, onClick)
 import Http
 import Json.Decode exposing (int, string, float, nullable, Decoder, list)
 import Json.Decode.Pipeline exposing (decode, required, optional, hardcoded)
@@ -13,7 +13,8 @@ import Json.Decode.Pipeline exposing (decode, required, optional, hardcoded)
 
 type alias Model =
     { searchInput : String,
-      searchResults : SearchResults
+      searchResults : SearchResults,
+      ownResults : List SearchItem
     }
 
 type alias SearchResults =
@@ -27,7 +28,7 @@ type alias SearchItem =
 
 init : ( Model, Cmd Msg )
 init =
-    ( { searchInput = "", searchResults = (SearchResults [])}, Cmd.none )
+    ( { searchInput = "", searchResults = (SearchResults []), ownResults = []}, Cmd.none )
 
 
 
@@ -36,6 +37,8 @@ init =
 
 type Msg
     = SearchInputChange String
+    | AddResultToList SearchItem
+    | RemoveFromList SearchItem
     | FetchSearchResult (Result Http.Error SearchResults)
 
 
@@ -44,6 +47,12 @@ update msg model =
     case msg of
     SearchInputChange value ->
         ({ model | searchInput = value }, fetchSearchResult value)
+
+    AddResultToList searchItem ->
+        ({ model | ownResults = searchItem :: model.ownResults}, Cmd.none)
+
+    RemoveFromList searchItem ->
+        ({ model | ownResults = (List.filter (\res-> res.title /= searchItem.title) model.ownResults)}, Cmd.none)
 
     FetchSearchResult (Ok res) ->
         ( { model | searchResults = res }, Cmd.none)
@@ -68,17 +77,35 @@ view model =
 searchResults : Model -> Html Msg
 searchResults model  =
     if ((String.isEmpty model.searchInput) && (List.isEmpty model.searchResults.search)) then
-        div [] [ text "Nothing found so far. Try again" ]
+        div [] [ text "Nothing found here. Try again!!!" ]
     else
         div [] [
             ul []
-                (List.map searchItem model.searchResults.search)
-
+                (List.map searchItem model.searchResults.search),
+            (displayOwnList model)
         ]
+
+displayOwnList : Model -> Html Msg
+displayOwnList model =
+    div [] [
+        ul []
+            (List.map showOwnItems model.ownResults)
+    ]
+
 
 searchItem : SearchItem -> Html Msg
 searchItem item =
-    li [] [text item.title]
+    li [] [
+        span [] [ text item.title ],
+        button [ onClick (AddResultToList item) ] [ text "+" ]
+    ]
+
+showOwnItems : SearchItem -> Html Msg
+showOwnItems item =
+    li [] [
+        span [] [ text item.title ],
+        button [ onClick (RemoveFromList item) ] [ text "-" ]
+    ]
 
 ---- HTTP ----
 
