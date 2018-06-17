@@ -1,7 +1,7 @@
 module Main exposing (..)
 
-import Html exposing (Html, text, div, h1, input, ul, li, span, button)
-import Html.Attributes exposing (src, placeholder)
+import Html exposing (Html, text, div, h1, input, ul, li, span, button, img)
+import Html.Attributes exposing (src, placeholder, disabled, type_, value)
 import Html.Events exposing (onInput, onClick)
 import Http
 import Json.Decode exposing (int, string, float, nullable, Decoder, list)
@@ -14,7 +14,15 @@ import Json.Decode.Pipeline exposing (decode, required, optional, hardcoded)
 type alias Model =
     { searchInput : String,
       searchResults : SearchResults,
-      ownResults : List SearchItem
+      ownResults : List OwnResult,
+      totalTimeWasted : Int
+    }
+
+type alias OwnResult =
+    {
+        item : SearchItem,
+        timesWatched : Int,
+        timePerMedium : Int
     }
 
 type alias SearchResults =
@@ -22,13 +30,15 @@ type alias SearchResults =
     }
 
 type alias SearchItem =
-    { title : String
+    { title : String,
+    imdbID : String,
+    poster : String
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { searchInput = "", searchResults = (SearchResults []), ownResults = []}, Cmd.none )
+    ( { searchInput = "", searchResults = (SearchResults []), ownResults = [], totalTimeWasted = 0}, Cmd.none )
 
 
 
@@ -38,8 +48,10 @@ init =
 type Msg
     = SearchInputChange String
     | AddResultToList SearchItem
-    | RemoveFromList SearchItem
+    | RemoveFromList OwnResult
     | FetchSearchResult (Result Http.Error SearchResults)
+    | ChangeTimesWatched OwnResult String
+    | CalculateTotalTimeWasted Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -49,16 +61,43 @@ update msg model =
         ({ model | searchInput = value }, fetchSearchResult value)
 
     AddResultToList searchItem ->
-        ({ model | ownResults = searchItem :: model.ownResults}, Cmd.none)
+        ({ model | ownResults = (OwnResult searchItem 0 1) :: model.ownResults}, Cmd.none) -- TODO use real time here
 
-    RemoveFromList searchItem ->
-        ({ model | ownResults = (List.filter (\res-> res.title /= searchItem.title) model.ownResults)}, Cmd.none)
+    RemoveFromList ownResult ->
+        let
+            newOwnResults = List.filter (\res-> res.item.imdbID /= ownResult.item.imdbID) model.ownResults
+        in
+            ({ model | ownResults = newOwnResults, totalTimeWasted = (calculateTimeWasted newOwnResults)}, Cmd.none)
+
+    ChangeTimesWatched selectectedOwnResult timesWatched ->
+        let
+            toInt watched =
+                case (String.toInt watched) of
+                    Ok v -> v
+                    Err message -> 0
+            updateTimesWatched res =
+                if res.item.imdbID == selectectedOwnResult.item.imdbID then
+                    { res | timesWatched = (toInt timesWatched)}
+                else
+                    res
+
+            newOwnResults = List.map updateTimesWatched model.ownResults
+        in
+            ({ model | ownResults = newOwnResults, totalTimeWasted = (calculateTimeWasted newOwnResults)}, Cmd.none)
+
+    CalculateTotalTimeWasted totalTimeWasted ->
+        ({model | totalTimeWasted = totalTimeWasted}, Cmd.none)
 
     FetchSearchResult (Ok res) ->
         ( { model | searchResults = res }, Cmd.none)
 
     FetchSearchResult (Err _) ->
         (model, Cmd.none)
+
+calculateTimeWasted : List OwnResult -> Int
+calculateTimeWasted ownList =
+    (List.map (\r -> r.timesWatched * r.timePerMedium) ownList)
+        |> List.sum
 
 
 
@@ -80,8 +119,7 @@ searchResults model  =
         div [] [ text "Nothing found here. Try again!!!" ]
     else
         div [] [
-            ul []
-                (List.map searchItem model.searchResults.search),
+            (displaySearchList model),
             (displayOwnList model)
         ]
 
@@ -89,22 +127,37 @@ displayOwnList : Model -> Html Msg
 displayOwnList model =
     div [] [
         ul []
-            (List.map showOwnItems model.ownResults)
+            (List.map showOwnItems model.ownResults),
+        span [] [ text ("Total time wasted " ++ (toString model.totalTimeWasted) ++ " h") ]
     ]
 
+displaySearchList : Model -> Html Msg
+displaySearchList model =
+    ul []
+        (List.map (\item -> searchItem item (isInOwnList item model.ownResults)) model.searchResults.search)
 
-searchItem : SearchItem -> Html Msg
-searchItem item =
-    li [] [
-        span [] [ text item.title ],
-        button [ onClick (AddResultToList item) ] [ text "+" ]
-    ]
 
-showOwnItems : SearchItem -> Html Msg
-showOwnItems item =
+isInOwnList : SearchItem -> List OwnResult -> Bool
+isInOwnList item ownResults =
+    (List.map (\r -> r.item) ownResults)
+        |> List.member item
+
+
+searchItem : SearchItem -> Bool -> Html Msg
+searchItem item isDisabled =
+        li [] [
+--            img [ src item.poster ] [],
+            span [] [ text item.title ],
+            button [ onClick (AddResultToList item), disabled isDisabled ] [ text "+" ]
+        ]
+
+showOwnItems : OwnResult -> Html Msg
+showOwnItems ownResult =
     li [] [
-        span [] [ text item.title ],
-        button [ onClick (RemoveFromList item) ] [ text "-" ]
+--        img [ src ownResult.item.poster ] [],
+        span [] [ text ownResult.item.title ],
+        input [ type_ "number", (onInput (ChangeTimesWatched ownResult)), value (toString ownResult.timesWatched) ] [],
+        button [ onClick (RemoveFromList ownResult) ] [ text "-" ]
     ]
 
 ---- HTTP ----
@@ -132,6 +185,8 @@ decodeSearchTerm : Json.Decode.Decoder SearchItem
 decodeSearchTerm =
     decode SearchItem
         |> required "Title" string
+        |> required "imdbID" string
+        |> required "Poster" string
 
 ---- PROGRAM ----
 
