@@ -21,21 +21,22 @@ type alias Model =
 
 
 type alias OwnResult =
-    { item : SearchItem
+    { item : SearchItem {}
     , timesWatched : Int
     , timePerMedium : Int
     }
 
 
 type alias SearchResults =
-    { search : List SearchItem
+    { search : List (SearchItem {})
     }
 
 
-type alias SearchItem =
-    { title : String
-    , imdbID : String
-    , poster : String
+type alias SearchItem a =
+    { a
+        | title : String
+        , imdbID : String
+        , poster : String
     }
 
 
@@ -56,7 +57,7 @@ init =
 
 type Msg
     = SearchInputChange String
-    | AddResultToList SearchItem
+    | AddResultToList (SearchItem {})
     | RemoveFromList OwnResult
     | FetchSearchResult (Result Http.Error SearchResults)
     | ChangeTimesWatched OwnResult String
@@ -156,13 +157,13 @@ displaySearchList model =
         (List.map (\item -> searchItem item (isInOwnList item model.ownResults)) model.searchResults.search)
 
 
-isInOwnList : SearchItem -> List OwnResult -> Bool
+isInOwnList : SearchItem {} -> List OwnResult -> Bool
 isInOwnList item ownResults =
     (List.map (\r -> r.item) ownResults)
         |> List.member item
 
 
-searchItem : SearchItem -> Bool -> Html Msg
+searchItem : SearchItem {} -> Bool -> Html Msg
 searchItem item isDisabled =
     li []
         [ --            img [ src item.poster ] [],
@@ -183,12 +184,6 @@ showOwnItems ownResult =
 
 
 ---- HTTP ----
---                    let
---                        imdbResult =
---                            decodeImdbResult
---                                |> Http.get (imdbSearchUrl result.imdbID)
---                                |> Http.toTask
---                    in
 
 
 fetchSearchResult : String -> Cmd Msg
@@ -217,6 +212,15 @@ fetchSearchResult searchTerm =
 
 
 
+---- HELPER ----
+
+
+searchItemCreator : String -> String -> String -> SearchItem {}
+searchItemCreator title imdbID poster =
+    { title = title, imdbID = imdbID, poster = poster }
+
+
+
 ---- HTTP DECODER ----
 
 
@@ -226,9 +230,9 @@ decodeSearchTerms =
         |> required "Search" (list decodeSearchTerm)
 
 
-decodeSearchTerm : Json.Decode.Decoder SearchItem
+decodeSearchTerm : Json.Decode.Decoder (SearchItem {})
 decodeSearchTerm =
-    decode SearchItem
+    decode searchItemCreator
         |> required "Title" string
         |> required "imdbID" string
         |> required "Poster" string
