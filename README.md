@@ -1,4 +1,8 @@
-1)`npm install -g create-elm-app`
-2) elm-app start
+#### Start the project with
+* `npm install -g create-elm-app`
+* elm-app start
 
-This App shows you how many time you already waste with watching netflix
+#### or
+* nix-shell
+
+This App shows you how much time you already wasted with watching series
