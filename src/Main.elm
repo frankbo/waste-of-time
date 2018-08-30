@@ -1,11 +1,16 @@
 module Main exposing (..)
 
-import Html exposing (Html, button, div, h1, img, input, li, span, text, ul)
-import Html.Attributes exposing (disabled, placeholder, src, type_, value)
-import Html.Events exposing (onClick, onInput)
+import Html exposing (Html, button, div, h1, h4, img, input, li, span, text, ul)
 import Http
 import Json.Decode exposing (Decoder, float, int, list, nullable, string)
 import Json.Decode.Pipeline exposing (decode, hardcoded, optional, required)
+import Material
+import Material.Button as MButton
+import Material.Icon as MIcon
+import Material.List as MList
+import Material.Options as MOptions
+import Material.Slider as MSlider
+import Material.Textfield as MTextfield
 
 
 ---- MODEL ----
@@ -16,6 +21,8 @@ type alias Model =
     , searchResults : SearchResults
     , ownResults : List OwnResult
     , totalTimeWasted : Int
+    , mdl :
+        Material.Model
     }
 
 
@@ -43,9 +50,21 @@ type alias WastedTime =
     }
 
 
+type alias Mdl =
+    Material.Model
+
+
 init : ( Model, Cmd Msg )
 init =
-    ( { searchInput = "", searchResults = SearchResults [], ownResults = [], totalTimeWasted = 0 }, Cmd.none )
+    ( { searchInput = ""
+      , searchResults = SearchResults []
+      , ownResults = []
+      , totalTimeWasted = 0
+      , mdl =
+            Material.model
+      }
+    , Cmd.none
+    )
 
 
 
@@ -58,8 +77,9 @@ type Msg
     | RemoveFromList OwnResult
     | FetchSearchResult (Result Http.Error SearchResults)
     | FetchWastedTime String (Result Http.Error WastedTime)
-    | ChangeTimesWatched OwnResult String
+    | ChangeTimesWatched OwnResult Float
     | CalculateTotalTimeWasted Int
+    | Mdl (Material.Msg Msg)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -80,17 +100,9 @@ update msg model =
 
         ChangeTimesWatched selectectedOwnResult timesWatched ->
             let
-                toInt watched =
-                    case String.toInt watched of
-                        Ok v ->
-                            v
-
-                        Err message ->
-                            0
-
                 updateTimesWatched res =
                     if res.item.imdbID == selectectedOwnResult.item.imdbID then
-                        { res | timesWatched = toInt timesWatched }
+                        { res | timesWatched = round timesWatched }
                     else
                         res
 
@@ -124,6 +136,9 @@ update msg model =
         FetchWastedTime imdbID (Err _) ->
             ( model, Cmd.none )
 
+        Mdl msg_ ->
+            Material.update Mdl msg_ model
+
 
 calculateTimeWasted : List OwnResult -> Int
 calculateTimeWasted ownList =
@@ -139,7 +154,15 @@ view : Model -> Html Msg
 view model =
     div []
         [ h1 [] [ text "Waste of time" ]
-        , input [ placeholder "Search for your favorite Movie/Series", onInput SearchInputChange ] []
+        , MTextfield.render Mdl
+            [ 2 ]
+            model.mdl
+            [ MTextfield.label "Search for your favorite Movie/Series"
+            , MTextfield.floatingLabel
+            , MTextfield.text_
+            , MOptions.onInput SearchInputChange
+            ]
+            []
         , searchResults model
         ]
 
@@ -158,21 +181,22 @@ searchResults model =
 displayOwnList : Model -> Html Msg
 displayOwnList model =
     div []
-        [ ul []
-            (List.map showOwnItems model.ownResults)
+        [ h4 [] [ text "List of Watched Series" ]
+        , ul []
+            (List.map (showOwnItems model.mdl) model.ownResults)
         , span [] [ text ("Total time wasted " ++ toString (minutesToHours model.totalTimeWasted) ++ " h") ]
         ]
 
 
 minutesToHours : Int -> Int
 minutesToHours minutes =
-    minutes // 0
+    minutes // 60
 
 
 displaySearchList : Model -> Html Msg
 displaySearchList model =
     ul []
-        (List.map (\item -> searchItem item (isInOwnList item model.ownResults)) model.searchResults.search)
+        (List.map (\item -> searchItem model.mdl item (isInOwnList item model.ownResults)) model.searchResults.search)
 
 
 isInOwnList : SearchItem -> List OwnResult -> Bool
@@ -181,21 +205,34 @@ isInOwnList item ownResults =
         |> List.member item
 
 
-searchItem : SearchItem -> Bool -> Html Msg
-searchItem item isDisabled =
-    li []
-        [ --            img [ src item.poster ] [],
-          span [] [ text item.title ]
-        , button [ onClick (AddResultToList item), disabled isDisabled ] [ text "+" ]
+searchItem : Mdl -> SearchItem -> Bool -> Html Msg
+searchItem mdl item isDisabled =
+    MList.li []
+        [ MList.content
+            []
+            [ --            img [ src item.poster ] [],
+              span [] [ text item.title ]
+            ]
+        , MButton.render Mdl [ 0 ] mdl [ MButton.minifab, MOptions.onClick (AddResultToList item), MOptions.disabled isDisabled ] [ MIcon.i "add" ]
         ]
 
 
-showOwnItems : OwnResult -> Html Msg
-showOwnItems ownResult =
-    li []
-        [ span [] [ text ownResult.item.title ]
-        , input [ type_ "number", onInput (ChangeTimesWatched ownResult), value (toString ownResult.timesWatched) ] []
-        , button [ onClick (RemoveFromList ownResult) ] [ text "-" ]
+showOwnItems : Mdl -> OwnResult -> Html Msg
+showOwnItems mdl ownResult =
+    MList.li []
+        [ MList.content
+            []
+            [ --            img [ src item.poster ] [],
+              span [] [ text ownResult.item.title ]
+            , MSlider.view
+                [ MSlider.onChange (ChangeTimesWatched ownResult)
+                , MSlider.value (toFloat ownResult.timesWatched)
+                , MSlider.max 10
+                , MSlider.step 1
+                ]
+            , span [] [ text (toString ownResult.timesWatched) ]
+            ]
+        , MButton.render Mdl [ 0 ] mdl [ MButton.minifab, MOptions.onClick (RemoveFromList ownResult) ] [ MIcon.i "remove" ]
         ]
 
 
