@@ -1,6 +1,9 @@
 module Main exposing (..)
 
+import Color
+import Color.Convert
 import Html exposing (Html, button, div, h1, h4, img, input, li, span, text, ul)
+import Html.Attributes exposing (style)
 import Http
 import Json.Decode exposing (Decoder, float, int, list, nullable, string)
 import Json.Decode.Pipeline exposing (decode, hardcoded, optional, required)
@@ -184,7 +187,13 @@ displayOwnList model =
         [ h4 [] [ text "List of Watched Series" ]
         , ul []
             (List.map (showOwnItems model.mdl) model.ownResults)
-        , span [] [ text ("Total time wasted " ++ toString (minutesToHours model.totalTimeWasted) ++ " h") ]
+        , span
+            [ style
+                [ ( "color", Color.Convert.colorToCssRgb (Color.rgb 212 106 106) )
+                , ( "fontSize", "32px" )
+                ]
+            ]
+            [ text ("Total time wasted " ++ toString (minutesToHours model.totalTimeWasted) ++ " h") ]
         ]
 
 
